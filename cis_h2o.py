@@ -68,7 +68,7 @@ print('excitation energy', eigenvalues)
 c_ia = np.einsum('i,a->ia', mo[nocc:], mo[:nocc])
 c_iajb = np.einsum('ia,jb->iajb', c_ia,c_ia)
 E_cis = mo_energy + c_ia*c_ia*A_a + c_iajb * iajb
-bprint('E_cis =', E_cis )
+print('E_cis =', E_cis )
 
 # pyscf TDA
 mytd = tdscf.TDA(mf)
