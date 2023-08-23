@@ -34,7 +34,7 @@ print('norb = ', len(mo))
 #a
 
 eai = lib.direct_sum('a,i->ai',mo_vir,-mo_occ)
-eai = eai.flatten()'C')
+eai = eai.flatten('C')
 A_a = np.diag(eai)
 
 #b
@@ -61,16 +61,17 @@ print('A_a = ', A_a.shape)
 print('iajb',iajb.shape)
 print('eigenvalues',w.shape, w)
 
-e = scipy.sparse.linalg.eigs(w, k=1, which='SM')
-print('excitation energy', e)
+eigenvalues = scipy.sparse.linalg.eigs(w, k=1, which='SM')
+print('excitation energy', eigenvalues)
 
 #total energy of excited states
-c_ai = np.einsum('i,a->ia', mo[nocc:], mo[:nocc])
-E_cis = mo_energy + np.einsum('i,a->ia',c_ai*c_ai, A_a) + np.einsum('ij,ab->ijab',c_ai,iajb)
-print('E_cis =', E_cis )
+c_ia = np.einsum('i,a->ia', mo[nocc:], mo[:nocc])
+c_iajb = np.einsum('ia,jb->iajb', c_ia,c_ia)
+E_cis = mo_energy + c_ia*c_ia*A_a + c_iajb * iajb
+bprint('E_cis =', E_cis )
 
 # pyscf TDA
 mytd = tdscf.TDA(mf)
 mytd.verbose = 4
-mytd = mytd.run()
+mytd.run()
 print('TDA CIS total energy = ', mytd.e_tot)
