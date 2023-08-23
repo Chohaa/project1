@@ -67,6 +67,8 @@ print('excitation energy', eigenvalues)
 #total energy of excited states
 c_ia = np.einsum('i,a->ia', mo[nocc:], mo[:nocc])
 c_iajb = np.einsum('ia,jb->iajb', c_ia,c_ia)
+
+print('shape c_ia,c_iajb', c_ia, c_iajb)
 E_cis = mo_energy + c_ia*c_ia*A_a + c_iajb * iajb
 print('E_cis =', E_cis )
 
