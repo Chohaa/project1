@@ -21,6 +21,19 @@ mf.run()
 mo = mf.mo_coeff
 mo_energy = mf.mo_energy
 
+# pyscf TDA
+mytd = tdscf.TDA(mf)
+mytd.singlet = True 
+mytd.run()
+print('TDA CIS singlet excited state total energy = ', mytd.e_tot)
+
+mytd = tdscf.TDA(mf)
+mytd.singlet = False 
+mytd.run()
+print('TDA CIS Triplet excited state total energy = ', mytd.e_tot)
+
+#tda coeff?
+
 nocc = int(mol.nelectron/2)
 nvir = mo.shape[1]-nocc
 
@@ -29,13 +42,6 @@ mo_vir = mo_energy[:nocc]
 
 print('nelec =', nocc)
 print('norb = ', len(mo))
-
-# pyscf TDA
-mytd = tdscf.TDA(mf)
-mytd.verbose = 4
-mytd.run()
-print('TDA CIS total energy = ', mytd.e_tot)
-#tda coeff?
 
 
 #cis A = a + b, B = b; a = delta_ij*delta_ab(e_a - e_i); b = 2-electron integral; iajb
