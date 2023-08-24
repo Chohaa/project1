@@ -30,6 +30,17 @@ mo_vir = mo_energy[:nocc]
 print('nelec =', nocc)
 print('norb = ', len(mo))
 
+# pyscf TDA
+mytd = tdscf.TDA(mf)
+mytd.verbose = 4
+mytd.run()
+
+mo_mytd = mytd.mo_coeff
+
+print('mo_mytd' = mo_mytd)
+print('TDA CIS total energy = ', mytd.e_tot)
+
+
 #cis A = a + b, B = b; a = delta_ij*delta_ab(e_a - e_i); b = 2-electron integral; iajb
 #a
 
@@ -71,9 +82,3 @@ c_iajb = np.einsum('ia,jb->iajb', c_ia,c_ia)
 print('shape c_ia,c_iajb', c_ia, c_iajb)
 E_cis = mo_energy + c_ia*c_ia*A_a + c_iajb * iajb
 print('E_cis =', E_cis )
-
-# pyscf TDA
-mytd = tdscf.TDA(mf)
-mytd.verbose = 4
-mytd.run()
-print('TDA CIS total energy = ', mytd.e_tot)
