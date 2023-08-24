@@ -34,11 +34,8 @@ print('norb = ', len(mo))
 mytd = tdscf.TDA(mf)
 mytd.verbose = 4
 mytd.run()
-
-mo_mytd = mytd.mo_coeff
-
-print('mo_mytd' = mo_mytd)
 print('TDA CIS total energy = ', mytd.e_tot)
+#tda coeff?
 
 
 #cis A = a + b, B = b; a = delta_ij*delta_ab(e_a - e_i); b = 2-electron integral; iajb
