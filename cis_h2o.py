@@ -18,21 +18,25 @@ mf.verbose = 4
 mf.get_init_guess(mol, key='minao')
 mf.run()
 
-mo = mf.mo_coeff
-mo_energy = mf.mo_energy
+n_singlets = 1
+n_triplets = 1
 
 # pyscf TDA
 mytd = tdscf.TDA(mf)
 mytd.singlet = True 
-mytd.run()
+mytd.run(nstates = n_singlets)
 print('TDA CIS singlet excited state total energy = ', mytd.e_tot)
 
 mytd = tdscf.TDA(mf)
 mytd.singlet = False 
-mytd.run()
+mytd.run(nstates = n_triplets)
 print('TDA CIS Triplet excited state total energy = ', mytd.e_tot)
 
-#tda coeff?
+
+'''
+#CIS
+mo = mf.mo_coeff
+mo_energy = mf.mo_energy
 
 nocc = int(mol.nelectron/2)
 nvir = mo.shape[1]-nocc
@@ -55,10 +59,10 @@ A_a = np.diag(eai)
 ao_int2e = mol.intor('int2e')
 print('ao_int2e = ', mol.intor('int2e').shape)
 
-temp1 = np.einsum('ip,pqrs->iqrs',mo[:nocc],ao_int2e)
-temp2 = np.einsum('aq,iqrs->iars',mo[nocc:],temp1)
-temp1 = np.einsum('jr,iars->iajs',mo[:nocc],temp2)
-iajb = np.einsum('bs,iajs->iajb',mo[nocc:],temp1)
+temp1 = np.einsum('ip,pqrs->iqrs',mo[nocc:],ao_int2e)
+temp2 = np.einsum('aq,iqrs->iars',mo[:nocc],temp1)
+temp1 = np.einsum('jr,iars->iajs',mo[nocc:],temp2)
+iajb = np.einsum('bs,iajs->iajb',mo[:nocc],temp1)
 iajb = np.reshape(iajb,(nocc*nvir,nocc*nvir))
 
 
@@ -79,9 +83,11 @@ eigenvalues = scipy.sparse.linalg.eigs(w, k=1, which='SM')
 print('excitation energy', eigenvalues)
 
 #total energy of excited states
-c_ia = np.einsum('i,a->ia', mo[nocc:], mo[:nocc])
-c_iajb = np.einsum('ia,jb->iajb', c_ia,c_ia)
 
-print('shape c_ia,c_iajb', c_ia, c_iajb)
-E_cis = mo_energy + c_ia*c_ia*A_a + c_iajb * iajb
+c_ia2 = np.einsum('pi,qi-> pq', mo, mo)
+
+
+print('shape c_ia2', c_ia2.shape)
+E_cis = mo_energy + c_ia2 @ A_a + c_ia2 @ iajb
 print('E_cis =', E_cis )
+'''
