@@ -107,7 +107,7 @@ mol.build()
 mf = scf.RHF(mol)
 mf.verbose = 4
 mf.get_init_guess(mol, key='minao')
-mf.kernel()
+mf.kernel() 
 
 norbs = len(mf.mo_coeff)
 nelec = int(mol.nelectron / 2)
@@ -130,9 +130,10 @@ print('TDA CIS singlet excited state total energy = ', mytd.e_tot)
 
 mf = mytd._scf
 e_s, xpoints_singlets = active_space_energies_td(mf, 14, nelec, n_singlets)
+e_ciss = mytd.e_tot
 
 # Calculate the error for singlets
-errors_s = [mytd.e_tot[0] - energy for energy in e_s]
+errors_s = [e_ciss[0] - energy for energy in e_s]
 
 # compute triplets 
 mytd = tdscf.TDA(mf)
@@ -146,9 +147,10 @@ print('TDA CIS Triplet excited state total energy = ', mytd.e_tot)
 # varying active space size 
 mf = mytd._scf
 e_t, xpoints_triplets = active_space_energies_td(mf, 14, nelec, n_triplets)
+e_cist = mytd.e_tot
 
 # Calculate the error for triplets
-errors_t = [mytd.e_tot[0] - energy for energy in e_t]
+errors_t = [e_cist[0] - energy for energy in e_t]
 
 # Normalize
 avg_rdm1 = avg_rdm1 / (n_singlets + n_triplets + 1)
@@ -156,8 +158,22 @@ avg_rdm1 = avg_rdm1 / (n_singlets + n_triplets + 1)
 Cdoc, Cact = get_natural_orbital_active_space(avg_rdm1, mf.get_ovlp(), thresh=0.00275)
 
 #TDDFT
+mf = dft.RKS(mol)
+mf.xc = 'b3lyp'
+mf.kernel()
+
+mytd = tddft.TDDFT(mf)
+mytd.nstates = 10
+mytd.singlet = True
+mytd.kernel()
+mytd.analyze()
+
+e_dft_s = mytd.e_tot
 # Calculate the error
-errors_tddft = [mytd.e_tot[0] - energy for energy in e_t]
+errors_tddft = [mytd.e_tot[0] - energy for energy in e_eft_s]
+
+
+
 #EOM-CC
 # Calculate the error
 errors_eom = [mytd.e_tot[0] - energy for energy in e_t]
