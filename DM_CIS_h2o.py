@@ -53,10 +53,10 @@ def active_space_energies_td(mf, norbs, nelec, state_id):
     energies = []  # Store the energies for different active space sizes
     xpoints = []  # Store labels for the x-axis
 
-    for i in range(2, norbs):
+    for i in range(2, norbs, 2):
         for j in range(2, nelec, 2):
             ncas, nelecas = i, j
-            if ncas <= nelec <= norbs:
+            if ncas <= norbs and nelecas <= ncas:  # Ensure valid CAS setup
                 mycas = mcscf.CASCI(mf, ncas, nelecas)
                 mycas.kernel()
                 energies.append(mycas.e_tot)
@@ -64,12 +64,40 @@ def active_space_energies_td(mf, norbs, nelec, state_id):
 
     return energies, xpoints
 
+
 # Create the molecule
 mol = gto.Mole()
 mol.atom = '''
-O          0.00000        0.00000        0.11779
-H          0.00000        0.75545       -0.47116
-H          0.00000       -0.75545       -0.47116
+H       -3.4261000000     -2.2404000000      5.4884000000
+H       -5.6274000000     -1.0770000000      5.2147000000
+C       -3.6535000000     -1.7327000000      4.5516000000
+H       -1.7671000000     -2.2370000000      3.6639000000
+C       -4.9073000000     -1.0688000000      4.3947000000
+H       -6.1631000000      0.0964000000      3.1014000000
+C       -2.7258000000     -1.7321000000      3.5406000000
+H       -0.3003000000      1.0832000000     -5.2357000000
+C       -5.2098000000     -0.4190000000      3.2249000000
+C       -2.9961000000     -1.0636000000      2.3073000000
+H       -1.1030000000     -1.5329000000      1.3977000000
+H       -0.4270000000     -0.8029000000     -0.8566000000
+H        0.2361000000     -0.0979000000     -3.1273000000
+C       -1.0193000000      1.0730000000     -4.4150000000
+H       -2.4988000000      2.2519000000     -5.5034000000
+C       -4.2740000000     -0.3924000000      2.1445000000
+H       -5.5015000000      0.7944000000      0.8310000000
+C       -2.0613000000     -1.0272000000      1.2718000000
+C       -1.3820000000     -0.2895000000     -0.9772000000
+C       -0.7171000000      0.4180000000     -3.2476000000
+C       -2.2720000000      1.7395000000     -4.5690000000
+H       -4.1576000000      2.2412000000     -3.6787000000
+C       -4.5463000000      0.2817000000      0.9534000000
+C       -2.3243000000     -0.3402000000      0.0704000000
+C       -1.6528000000      0.3874000000     -2.1670000000
+C       -3.1998000000      1.7341000000     -3.5584000000
+C       -3.6044000000      0.3309000000     -0.0943000000
+C       -2.9302000000      1.0591000000     -2.3292000000
+C       -3.8665000000      1.0187000000     -1.2955000000
+H       -4.8243000000      1.5256000000     -1.4217000000
 '''
 mol.basis = '6-31g'
 mol.spin = 0
@@ -101,7 +129,7 @@ for i in range(mytd.nroots):
 print('TDA CIS singlet excited state total energy = ', mytd.e_tot)
 
 mf = mytd._scf
-e_s, xpoints_singlets = active_space_energies_td(mf, norbs, nelec, n_singlets)
+e_s, xpoints_singlets = active_space_energies_td(mf, 14, nelec, n_singlets)
 
 # Calculate the error for singlets
 errors_s = [mytd.e_tot[0] - energy for energy in e_s]
@@ -117,7 +145,7 @@ print('TDA CIS Triplet excited state total energy = ', mytd.e_tot)
 
 # varying active space size 
 mf = mytd._scf
-e_t, xpoints_triplets = active_space_energies_td(mf, norbs, nelec, n_triplets)
+e_t, xpoints_triplets = active_space_energies_td(mf, 14, nelec, n_triplets)
 
 # Calculate the error for triplets
 errors_t = [mytd.e_tot[0] - energy for energy in e_t]
@@ -126,6 +154,13 @@ errors_t = [mytd.e_tot[0] - energy for energy in e_t]
 avg_rdm1 = avg_rdm1 / (n_singlets + n_triplets + 1)
 # Compute natural orbital
 Cdoc, Cact = get_natural_orbital_active_space(avg_rdm1, mf.get_ovlp(), thresh=0.00275)
+
+#TDDFT
+# Calculate the error
+errors_tddft = [mytd.e_tot[0] - energy for energy in e_t]
+#EOM-CC
+# Calculate the error
+errors_eom = [mytd.e_tot[0] - energy for energy in e_t]
 
 # Create a plot
 plt.figure(figsize=(10, 6))
@@ -138,8 +173,16 @@ if errors_s:
 if errors_t:
     plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
 
+if errors_tddft:
+    plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
+
+if errors_eom:
+    plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
+
+
+
 plt.xlabel('Active Space Size (ncas, nelecas)')
-plt.ylabel('Energy Error (eV)')
+plt.ylabel('Energy Error; CIS - active space (eV)')
 plt.title('Error in CI Energy vs. Active Space Size')
 plt.xticks(rotation=45, ha='right')
 plt.grid(True)
