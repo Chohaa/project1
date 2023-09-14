@@ -144,13 +144,20 @@ for i in range(mytd.nroots):
     avg_rdm1 += tda_density_matrix(mytd, i)
 print('TDA CIS Triplet excited state total energy = ', mytd.e_tot)
 
+#EOM-CC
+e_s, c_s = mycc.eomee_ccsd_singlet(nroots=1)
+e_t, c_t = mycc.eomee_ccsd_triplet(nroots=1)
+# Calculate the error
+errors_eom = (e_ciss - e_s)
+errort_eom = (e_cist - e_t)
+
 # varying active space size 
 mf = mytd._scf
 e_t, xpoints_triplets = active_space_energies_td(mf, 14, nelec, n_triplets)
 e_cist = mytd.e_tot
 
 # Calculate the error for triplets
-errors_t = [e_cist[0] - energy for energy in e_t]
+errors_t = [e_ciss - energy for energy in e_t]
 
 # Normalize
 avg_rdm1 = avg_rdm1 / (n_singlets + n_triplets + 1)
@@ -169,14 +176,28 @@ mytd.kernel()
 mytd.analyze()
 
 e_dft_s = mytd.e_tot
+
 # Calculate the error
-errors_tddft = [mytd.e_tot[0] - energy for energy in e_eft_s]
+errors_tddft = (e_ciss -  e_dft_s)
 
+mytd = tddft.TDDFT(mf)
+mytd.nstates = 10
+mytd.singlet = False
+mytd.kernel()
+mytd.analyze()
 
+e_dft_t = mytd.e_tot
 
-#EOM-CC
 # Calculate the error
-errors_eom = [mytd.e_tot[0] - energy for energy in e_t]
+errort_tddft = (e_cist - e_eft_t)
+
+print('TDA CIS singlet excited state total energy = ', e_ciss)
+print('TDA CIS Triplet excited state total energy = ', e_cist)
+print('EOM-CC singlet excited state total energy = ', e_s, errors_eom)
+print('EOM-CC triplet excited state total energy = ', e_t, errort_eom)
+print('TDDFT singlet excited state total energy = ', e_dft_s, errors_tddft)
+print('TDDFT singlet excited state total energy = ', e_dft_t, errort_tddft)
+
 
 # Create a plot
 plt.figure(figsize=(10, 6))
@@ -188,14 +209,7 @@ if errors_s:
 # Plot the errors for triplets if there are triplet states
 if errors_t:
     plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
-
-if errors_tddft:
-    plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
-
-if errors_eom:
-    plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
-
-
+    
 
 plt.xlabel('Active Space Size (ncas, nelecas)')
 plt.ylabel('Energy Error; CIS - active space (eV)')
