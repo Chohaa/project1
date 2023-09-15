@@ -21,7 +21,7 @@ mf.get_init_guess(mol, key='minao')
 mf.kernel() 
 
 norbs = len(mf.mo_coeff)
-nelec = int(mol.nelectron / 2)
+nelec = int(mol.nelectron)
 
 e_ciss = -75.63765745
 e_cist = -75.67286802
