@@ -1,5 +1,6 @@
 import pyscf 
 from pyscf import gto, scf, tdscf, ao2mo
+import matplotlib.pyplot as plt
 
 import scipy
 import numpy as np
@@ -115,6 +116,33 @@ E_init = mf.e_tot
 Vne = mol.intor_symmetric('int1e_nuc')
 T = mol.intor_symmetric('int1e_kin')
 
+# Compute singlets and triplets
+n_singlets = 1
+n_triplets = 1
+
+# CIS to define active space from rdm
+# compute singlets
+mytd = tdscf.TDA(mf)
+mytd.singlet = True
+mytd = mytd.run(nstates=n_singlets)
+mytd.analyze()
+for i in range(mytd.nroots):
+    P += tda_density_matrix(mytd, i)
+escis = mytd.e_tot
+print('escis = ', mytd.e_tot)
+
+# compute triplets 
+mytd = tdscf.TDA(mf)  
+mytd.singlet = False
+mytd = mytd.run(nstates=n_triplets)
+mytd.analyze()
+for i in range(mytd.nroots):
+    P += tda_density_matrix(mytd, i)
+etcis = mytd.e_tot
+print('etcis = ', mytd.e_tot)
+
+# New density matrix
+P = P / (n_singlets + n_triplets + 1)
 Cdoc, Cact, doc_list, act_list, vir_list = get_natural_orbital_active_space(P, S, thresh=0.01, save_lengths=True)
 
 Cenv = C[:, doc_list]
@@ -125,23 +153,24 @@ nact = Cact.shape[1]
 nenv = Cenv.shape[1]
 nvir = Cvir.shape[1]
 
-print('Number of Active MOs: ', nact)
+print('Number of Active MOs? AOs?: ', nact)
 print('Number of Environment MOs: ', nenv)
 print('Number of Virtual MOs: ', nvir)
 
-D_C = 2.0 * Cvir @ Cvir.conj().T
-D_B = 2.0 * Cenv @ Cenv.conj().T
-D_A = 2.0 * Cact @ Cact.conj().T
+D_C = Cvir @ Cvir.conj().T
+D_B = Cenv @ Cenv.conj().T
+D_A = Cact @ Cact.conj().T
 
 #values for subspace, new mf
-Jenv, Kenv = mf.get_jk(dm = D_B)
+Jenv, Kenv = mf.get_jk(dm = D_B) #ao basis? mo basis? )
+
 Jact, Kact = mf.get_jk(dm = D_A)
 
 P_B = S @ D_B @ S + S @ D_C @ S
-mu = 1.0e6
+mu = 10^6
 
-Vact = Jact + Kact
-Vemb = J + K - Vact + (mu * P_B)
+Vact = (Jact + Kact) @D_B
+Vemb = (J + K) @ P- Vact + (mu * P_B)
 
 '''
 #DFT
@@ -170,25 +199,15 @@ C_emb = emb_mf.mo_coeff
 P_emb = emb_mf.make_rdm1
 
 
-# Embeded mean-field
-
-Cenv, e_orb_env = semi_canonicalize(Cenv, F)
-Cact, e_orb_act = semi_canonicalize(Cact, F)
-
-# Compute singlets and triplets
-n_singlets = 1
-n_triplets = 1
-
 # CIS
 # compute singlets
 mf_eff = tdscf.TDA(emb_mf)
 mf_eff.singlet = True
 mf_eff = mf_eff.run(nstates=n_singlets)
 mf_eff.analyze()
-for i in range(mf_eff.nroots):
-    avg_rdm1 += tda_density_matrix(mf_eff, i)
-print('TDA CIS singlet excited state total energy = ', mf_eff.e_tot)
-
+print('e_ciss = ', mf_eff.e_tot)
+e_ciss = mf_eff.e_tot
+errors_s = escis - e_ciss
 # varying active space size singlet
 
 
@@ -197,31 +216,29 @@ mf_eff = tdscf.TDA(emb_mf)
 mf_eff.singlet = False
 mf_eff = mf_eff.run(nstates=n_triplets)
 mf_eff.analyze()
-for i in range(mf_eff.nroots):
-    avg_rdm1 += tda_density_matrix(mf_eff, i)
-print('TDA CIS Triplet excited state total energy = ', mf_eff.e_tot)
+e_cist = mf_eff.e_tot
+errors_t = etcis - e_cist
+print('e_cist = ', mf_eff.e_tot)
 
 # varying active space size 
 
-# New density matrix
-avg_rdm1 = avg_rdm1 / (n_singlets + n_triplets + 1)
-Cdoc, Cact, doc_list, act_list = get_natural_orbital_active_space(avg_rdm1, S, thresh=0.01, save_lengths=True)
 
 
-
-print('number of orbitals, electrons =', norbs, nelec)
-print('TDA CIS singlet excited state total energy = ', e_ciss)
-print('TDA CIS triplet excited state total energy = ', e_cist)
+print('number of orbitals, electrons =', mol.nao, mol.nelectron)
+print('TDA CIS singlet excited state total energy in active space = ', e_ciss)
+print('TDA CIS triplet excited state total energy in active space= ', e_cist)
 
 # Create a plot
 plt.figure(figsize=(10, 6))
 
 # Plot the errors for singlets if there are singlet states
 if errors_s:
+    xpoints_singlets = 1
     plt.plot(xpoints_singlets, errors_s, marker='o', linestyle='-', label='Singlets')
 
 # Plot the errors for triplets if there are triplet states
 if errors_t:
+    xpoints_triplets = 1
     plt.plot(xpoints_triplets, errors_t, marker='o', linestyle='-', label='Triplets')
 
 plt.xlabel('Active Space Size (ncas, nelecas)')
