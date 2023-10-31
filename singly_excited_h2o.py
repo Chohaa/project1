@@ -72,12 +72,13 @@ lumo_index = homo_index + 1
 
 active_sizes = list(range(2, nelec + 1, 2))
 active_sizes = [size // 2 for size in active_sizes]
-    
+
 e_ciss_list = []
 e_cist_list = []
 
 error_s = []  
 error_t = []  
+
 
 for i in active_sizes:
     act_list = list(range(homo_index - i +1, lumo_index + i))  
@@ -153,7 +154,7 @@ for i in active_sizes:
     mf_eff.analyze()
     e_cist = mf_eff.e_tot
 
-    print('e_ciss,ecist', e_ciss, e_cist)
+    print('e_ciss,e_cist', e_ciss, e_cist)
     e_ciss_list.append(e_ciss)
     e_cist_list.append(e_cist)
 
@@ -165,6 +166,7 @@ plt.figure(figsize=(10, 6))
 active_sizes = list(range(2, nelec + 1, 2))
 
 # Plot e_ciss and e_cist with respect to active space size
+plt.subplot(121)
 plt.plot(active_sizes, e_ciss_list, marker='o', linestyle='-', label='Singlet')
 plt.plot(active_sizes, e_cist_list, marker='o', linestyle='-', label='Triplet')
 
@@ -179,6 +181,7 @@ file_name = "h2o_cno_e_tot.png"
 plt.savefig(file_name)
 
 # Plot e_ciss and e_cist with respect to active space size
+plt.subplot(122)
 plt.plot(active_sizes, error_s, marker='o', linestyle='-', label='Singlet')
 plt.plot(active_sizes, error_t, marker='o', linestyle='-', label='Triplet')
 
@@ -189,6 +192,6 @@ plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
+plt.show()
 file_name = "H2O.png"
 plt.savefig(file_name)
-
