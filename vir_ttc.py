@@ -12,11 +12,6 @@ def print_matrix_as_integers(mat):
         row_str = " ".join(str(int(elem)) for elem in row)
         print(row_str)
 
-def semi_canonicalize(C,F):
-    e,v = np.linalg.eigh(C.conj().T @ F @ C)
-    C_bar = C @ v
-    return C_bar, e
-
 # Create the molecule
 mol = gto.Mole()
 mol.atom = '''
@@ -70,7 +65,6 @@ F = mf.get_fock()
 J, K = mf.get_jk()
 Vsys = mf.get_veff()
 
-print('fock')
 print_matrix_as_integers(F)
 
 mo_occ = mf.get_occ()
@@ -82,7 +76,9 @@ mftda = tdscf.TDA(mf)
 mftda.singlet = True
 mftda.run(nstates=1)
 mftda.analyze()
+
 eciss = mftda.e_tot
+e0 = mftda.e
 print('cis singlet total energy:', eciss)
 
 mftda = tdscf.TDA(mf)
@@ -90,6 +86,7 @@ mftda.singlet = False
 mftda.run(nstates=1)
 mftda.analyze()
 ecist = mftda.e_tot
+e1 = mftda.e
 print('cis triplet total energy:', ecist)
 
 molden.from_mo(mol, 'ttc.molden', C)
@@ -97,7 +94,7 @@ molden.from_mo(mol, 'ttc.molden', C)
 orbital_energies = mf.mo_energy
 nelec = mol.nelectron
 num_orbitals = len(orbital_energies)
-print(nelec, num_orbitals) 
+print('nelec,num_orbitals', nelec, num_orbitals) #120,102
 
 # Calculate HOMO and LUMO indices from mo_occf
 homo_index = np.where(mo_occ == 2)[0][-1]
@@ -106,12 +103,19 @@ lumo_index = homo_index + 1
 active_sizes = list(range(2, nelec + 1, 2))
 active_sizes = [size // 2 for size in active_sizes]
 
+
+e_0_list = []
+e_1_list = []
+
+
 e_ciss_list = []
 e_cist_list = []
 
 error_s = []  
 error_t = []  
 
+error_0 = []
+error_1 = []
 
 for i in active_sizes:
     '''
@@ -120,30 +124,24 @@ for i in active_sizes:
     vir_list = list(range(lumo_index + i, num_orbitals))   
     '''
 
-    act_list = list(range(lumo_index - i, num_orbitals))
-    #env_list = list(range())
+    act_list = list(range(homo_index +1, num_orbitals))
     vir_list = list(range(0, homo_index - i))
 
     act_array = np.array(act_list)
     print(type(act_array))
 
     Cact = C[:, act_list]
-    #Cenv = C[:, env_list]
     Cvir = C[:, vir_list]
 
-    # localiz
     pyscf.tools.molden.from_mo(mol, "Cact.molden", Cact)
 
     nact = Cact.shape[1]
-    #nenv = Cenv.shape[1]
     nvir = Cvir.shape[1]
 
     print('Number of Active AO: ', nact)
-    #print('Number of Environment MOs: ', nenv)
-    print('Number of Virtual MOs: ', nvir)
+    print('Number of Virtual AOs: ', nvir)
 
     D_A = 2.0 * Cact @ Cact.conj().T
-    #D_B = 2.0 * Cenv @ Cenv.conj().T
     D_C = 2.0 * Cvir @ Cvir.conj().T
 
     #values for subspace, new mf
@@ -181,7 +179,7 @@ for i in active_sizes:
     print('emb mf.get_hcore,',emb_mf.get_hcore())
     print('emb mf.get_hcore-Vemb', Vemb)
 
-    emb_mf.verbose = 2
+    emb_mf.verbose = 4
     emb_mf.get_hcore = lambda *args: H_core + Vemb
     emb_mf.max_cycle = 200
     emb_mf.kernel(D_A)
@@ -190,17 +188,21 @@ for i in active_sizes:
     # CIS calculations for singlets and triplets
     mf_eff = tdscf.TDA(emb_mf)
     mf_eff.singlet = True
-    mf_eff.run(nstates=3)
+    mf_eff.run(nstates=9)
     mf_eff.analyze()
     e_ciss = mf_eff.e_tot
+    e00 = mf_eff.e
     e_ciss = min(e_ciss)
+    e00 = min(e00)
 
     mf_eff = tdscf.TDA(emb_mf)
     mf_eff.singlet = False
-    mf_eff.run(nstates=3)
+    mf_eff.run(nstates=9)
     mf_eff.analyze()
     e_cist = mf_eff.e_tot
+    e11 = mf_eff.e
     e_cist = min(e_cist)
+    e11 = min(e11)
 
     print('e_ciss,e_cist', e_ciss, e_cist)
     e_ciss_list.append(e_ciss)
@@ -208,6 +210,11 @@ for i in active_sizes:
 
     error_s.append(e_ciss - eciss)
     error_t.append(e_cist - ecist)
+
+    e_0_list.append(e00)
+    e_1_list.append(e11)
+    error_0.append(e00 - e0)
+    error_1.append(e11 - e1)
 
 print(mf.e_tot)
 print(emb_mf.e_tot)
@@ -220,14 +227,14 @@ active_sizes = list(range(2, nelec + 1, 2))
 
 # Create the first subplot
 plt.subplot(1, 2, 1)
-plt.plot(active_sizes, e_ciss_list, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, e_cist_list, marker='o', linestyle='-', label='Triplet')
-plt.axhline(y=eciss, color='red', linestyle='--', label='CIS Singlet')
-plt.axhline(y=ecist, color='blue', linestyle='--', label='CIS Triplet')
+plt.plot(active_sizes, e_0_list, marker='o', linestyle='-', label='Singlet')
+plt.plot(active_sizes, e_1_list, marker='o', linestyle='-', label='Triplet')
+plt.axhline(y=e0, color='blue', linestyle='--', label='CIS Singlet')
+plt.axhline(y=e1, color='red', linestyle='--', label='CIS Triplet')
 
 plt.xlabel('Active Space Size')
-plt.ylabel('Total energy(hartree)')
-plt.title('Total energy vs Active space size')
+plt.ylabel('Excitation energy (in eV)')
+plt.title('water excitation energy by active space sizes')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
@@ -244,9 +251,6 @@ plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
-# Save and display the plots
-plt.show()
-
-file_name = "vir_ttc.png"
+file_name = "water2.png"
 plt.savefig(file_name)
-
+plt.show()
