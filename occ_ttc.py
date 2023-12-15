@@ -12,46 +12,12 @@ def print_matrix_as_integers(mat):
         row_str = " ".join(str(int(elem)) for elem in row)
         print(row_str)
 
-def semi_canonicalize(C,F):
-    e,v = np.linalg.eigh(C.conj().T @ F @ C)
-    C_bar = C @ v
-    return C_bar, e
-
 # Create the molecule
 mol = gto.Mole()
 mol.atom = '''
-H       -3.4261000000     -2.2404000000      5.4884000000
-H       -5.6274000000     -1.0770000000      5.2147000000
-C       -3.6535000000     -1.7327000000      4.5516000000
-H       -1.7671000000     -2.2370000000      3.6639000000
-C       -4.9073000000     -1.0688000000      4.3947000000
-H       -6.1631000000      0.0964000000      3.1014000000
-C       -2.7258000000     -1.7321000000      3.5406000000
-H       -0.3003000000      1.0832000000     -5.2357000000
-C       -5.2098000000     -0.4190000000      3.2249000000
-C       -2.9961000000     -1.0636000000      2.3073000000
-H       -1.1030000000     -1.5329000000      1.3977000000
-H       -0.4270000000     -0.8029000000     -0.8566000000
-H        0.2361000000     -0.0979000000     -3.1273000000
-C       -1.0193000000      1.0730000000     -4.4150000000
-H       -2.4988000000      2.2519000000     -5.5034000000
-C       -4.2740000000     -0.3924000000      2.1445000000
-H       -5.5015000000      0.7944000000      0.8310000000
-C       -2.0613000000     -1.0272000000      1.2718000000
-C       -1.3820000000     -0.2895000000     -0.9772000000
-C       -0.7171000000      0.4180000000     -3.2476000000
-C       -2.2720000000      1.7395000000     -4.5690000000
-H       -4.1576000000      2.2412000000     -3.6787000000
-C       -4.5463000000      0.2817000000      0.9534000000
-C       -2.3243000000     -0.3402000000      0.0704000000
-C       -1.6528000000      0.3874000000     -2.1670000000
-C       -3.1998000000      1.7341000000     -3.5584000000
-C       -3.6044000000      0.3309000000     -0.0943000000
-C       -2.9302000000      1.0591000000     -2.3292000000
-C       -3.8665000000      1.0187000000     -1.2955000000
-H       -4.8243000000      1.5256000000     -1.4217000000
-'''
-mol.basis = '6-31g'
+O          0.00000        0.00000        0.11779
+H          0.00000        0.75545       -0.47116
+H          0.00000       -0.75545       -0.47116'''
 mol.spin = 0
 mol.build()
 
@@ -83,7 +49,9 @@ mftda = tdscf.TDA(mf)
 mftda.singlet = True
 mftda.run(nstates=1)
 mftda.analyze()
+
 eciss = mftda.e_tot
+e0 = mftda.e
 print('cis singlet total energy:', eciss)
 
 mftda = tdscf.TDA(mf)
@@ -91,6 +59,7 @@ mftda.singlet = False
 mftda.run(nstates=1)
 mftda.analyze()
 ecist = mftda.e_tot
+e1 = mftda.e
 print('cis triplet total energy:', ecist)
 
 molden.from_mo(mol, 'ttc.molden', C)
@@ -98,6 +67,7 @@ molden.from_mo(mol, 'ttc.molden', C)
 orbital_energies = mf.mo_energy
 nelec = mol.nelectron
 num_orbitals = len(orbital_energies)
+print(nelec, num_orbitals) 
 
 # Calculate HOMO and LUMO indices from mo_occf
 homo_index = np.where(mo_occ == 2)[0][-1]
@@ -106,12 +76,21 @@ lumo_index = homo_index + 1
 active_sizes = list(range(2, nelec + 1, 2))
 active_sizes = [size // 2 for size in active_sizes]
 
+#list of excitation energy 0 for singlet 1 for triplet
+e_0_list = []
+e_1_list = []
+
+#list of total energy 
 e_ciss_list = []
 e_cist_list = []
 
+#list of total energy differences between TDA and active space TDA
 error_s = []  
 error_t = []  
 
+#list of excitation energy differences between TDA and active space TDA
+error_0 = []
+error_1 = []
 
 for i in active_sizes:
     '''
@@ -120,11 +99,12 @@ for i in active_sizes:
     vir_list = list(range(lumo_index + i, num_orbitals))   
     '''
 
-    act_list = list(range(0, homo_index + i))
+    act_list = list(range(0, lumo_index ))
     #env_list = list(range())
     vir_list = list(range(lumo_index + i, num_orbitals))
 
     act_array = np.array(act_list)
+    print(type(act_array))
 
     Cact = C[:, act_list]
     #Cenv = C[:, env_list]
@@ -180,26 +160,30 @@ for i in active_sizes:
     print('emb mf.get_hcore,',emb_mf.get_hcore())
     print('emb mf.get_hcore-Vemb', Vemb)
 
-    emb_mf.verbose = 5
+    emb_mf.verbose = 4
     emb_mf.get_hcore = lambda *args: H_core + Vemb
     emb_mf.max_cycle = 200
     emb_mf.kernel(D_A)
     print('emb_mf.e_tot', emb_mf.e_tot)  
 
-    # CIS calculations for singlets and triplets
+    # CIS calculations for singlets and triplets in Active space
     mf_eff = tdscf.TDA(emb_mf)
     mf_eff.singlet = True
     mf_eff.run(nstates=3)
     mf_eff.analyze()
     e_ciss = mf_eff.e_tot
+    e00 = mf_eff.e
     e_ciss = min(e_ciss)
+    e00 = min(e00)
 
     mf_eff = tdscf.TDA(emb_mf)
     mf_eff.singlet = False
     mf_eff.run(nstates=3)
     mf_eff.analyze()
     e_cist = mf_eff.e_tot
+    e11 = mf_eff.e
     e_cist = min(e_cist)
+    e11 = min(e11)
 
     print('e_ciss,e_cist', e_ciss, e_cist)
     e_ciss_list.append(e_ciss)
@@ -207,6 +191,12 @@ for i in active_sizes:
 
     error_s.append(e_ciss - eciss)
     error_t.append(e_cist - ecist)
+
+    e_0_list.append(e00)
+    e_1_list.append(e11)
+
+    error_0.append(e00 - e0)
+    error_1.append(e11 - e1)
 
 print(mf.e_tot)
 print(emb_mf.e_tot)
@@ -219,14 +209,14 @@ active_sizes = list(range(2, nelec + 1, 2))
 
 # Create the first subplot
 plt.subplot(1, 2, 1)
-plt.plot(active_sizes, e_ciss_list, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, e_cist_list, marker='o', linestyle='-', label='Triplet')
-plt.axhline(y=eciss, color='red', linestyle='--', label='CIS Singlet')
-plt.axhline(y=ecist, color='blue', linestyle='--', label='CIS Triplet')
+plt.plot(active_sizes, e_0_list, marker='o', linestyle='-', label='Singlet')
+plt.plot(active_sizes, e_1_list, marker='o', linestyle='-', label='Triplet')
+plt.axhline(y=e0, color='blue', linestyle='--', label='CIS Singlet')
+plt.axhline(y=e1, color='red', linestyle='--', label='CIS Triplet')
 
 plt.xlabel('Active Space Size')
-plt.ylabel('Total energy(hartree)')
-plt.title('Total energy vs Active space size')
+plt.ylabel('Excitation energy (in eV)')
+plt.title('water excitation energy by active space sizes')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
@@ -237,24 +227,12 @@ plt.plot(active_sizes, error_s, marker='o', linestyle='-', label='Singlet')
 plt.plot(active_sizes, error_t, marker='o', linestyle='-', label='Triplet')
 
 plt.xlabel('Active Space Size')
-plt.ylabel('Energy Difference(hartree)')
-plt.title('|E_cis - E_cis_act|')
+plt.ylabel('|E_cis - E_cis_act|')
+plt.title('|E_cis - E_cis_act| vs Active space size')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
-# Save and display the plots
-plt.show()
-
-file_name = "ttc_cno.png"
+file_name = "water2.png"
 plt.savefig(file_name)
-
-'''
-    #rotate 1electron terms to active space
-    #TDA hsppens in ao basis/ no rotation needed just projector
-    Hact = Cact.T @ H_core @ Cact
-    Jact = Cact.T @ J @ Cact
-    Kact = Cact.T @ K @ Cact
-'''
-    #integrals h1 (h_{pq}D_{pq})
- #   h1 = Hact + Jact - 0.5 * Kact'''
+plt.show()
