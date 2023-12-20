@@ -53,7 +53,7 @@ Vne = mol.intor_symmetric('int1e_nuc')
 T = mol.intor_symmetric('int1e_kin')
 
 # Perform Restricted Hartree-Fock calculation
-mf = scf.RHF(mol).apply(scf.addons.remove_linear_dep_)
+mf = scf.RHF(mol)
 mf.verbose = 4
 mf.kernel()
 
@@ -72,19 +72,22 @@ S = mf.get_ovlp()
 C = mf.mo_coeff
 P = mf.make_rdm1()
 
+print(" Number of electrons found %12.8f" %np.trace(S@P))
+
+
 mftda = tdscf.TDA(mf)
 mftda.singlet = True
 mftda.run(nstates=1)
 mftda.analyze()
 eciss = mftda.e_tot
-print('cis singlet total energy:', eciss)
+e0 = mftda.e
 
 mftda = tdscf.TDA(mf)
 mftda.singlet = False
 mftda.run(nstates=1)
 mftda.analyze()
 ecist = mftda.e_tot
-print('cis triplet total energy:', ecist)
+e1 = mftda.e
 
 molden.from_mo(mol, 'ttc.molden', C)
 
@@ -99,7 +102,6 @@ lumo_index = homo_index + 1
 #active_sizes = len(lumo_index,num_orbitals)
 #active_sizes = list(range(0,active_sizes))
 
-
 e_ciss_list = []
 e_cist_list = []
 
@@ -107,10 +109,12 @@ error_s = []
 error_t = []  
 
 active_sizes = []
+e000 = []
+e111 = []
 
 for i in range(0,lumo_index):
 
-    active_sizes.append(i)
+    active_sizes.append(num_orbitals - i)
 
     act_list = list(range(i, num_orbitals))
     vir_list = list(range(0, i))
@@ -161,14 +165,10 @@ for i in range(0,lumo_index):
 
     mol.build()
 
-    print('emb mf.get_hcore,',emb_mf.get_hcore())
-    print('emb mf.get_hcore-Vemb', Vemb)
-
     emb_mf.verbose = 5
     emb_mf.get_hcore = lambda *args: H_core + Vemb
     emb_mf.max_cycle = 200
     emb_mf.kernel(D_A)
-    print('emb_mf.e_tot', emb_mf.e_tot)  
 
     # CIS calculations for singlets and triplets
     es_eff = tdscf.TDA(emb_mf)
@@ -176,6 +176,7 @@ for i in range(0,lumo_index):
     es_eff.run(nstates=3)
     es_eff.analyze()
     e_ciss = min(es_eff.e_tot)
+    e00 = min(es_eff.e)
 
 
     et_eff = tdscf.TDA(emb_mf)
@@ -183,7 +184,10 @@ for i in range(0,lumo_index):
     et_eff.run(nstates=3)
     et_eff.analyze()
     e_cist = min(et_eff.e_tot)
+    e11 = min(et_eff.e)
 
+    e000.append(e00)
+    e111.append(e11)
 
     e_ciss_list.append(e_ciss)
     e_cist_list.append(e_cist)
@@ -196,13 +200,13 @@ plt.figure(figsize=(10, 6))
 
 # Create the first subplot
 plt.subplot(1, 2, 1)
-plt.plot(active_sizes, e_ciss_list, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, e_cist_list, marker='o', linestyle='-', label='Triplet')
-plt.axhline(y=eciss, color='red', linestyle='--', label='CIS Singlet')
-plt.axhline(y=ecist, color='blue', linestyle='--', label='CIS Triplet')
+plt.plot(active_sizes, e000, marker='o', linestyle='-', label='Singlet')
+plt.plot(active_sizes, e111, marker='o', linestyle='-', label='Triplet')
+plt.axhline(y=e0, color='red', linestyle='--', label='CIS Singlet')
+plt.axhline(y=e1, color='blue', linestyle='--', label='CIS Triplet')
 
 plt.xlabel('Active Space Size')
-plt.ylabel('Total energy(hartree)')
+plt.ylabel('Excitation energy (in eV)')
 plt.title('Total energy vs Active space size')
 plt.grid(True)
 plt.legend()
@@ -210,28 +214,18 @@ plt.tight_layout()
 
 # Create the second subplot
 plt.subplot(1, 2, 2)
-plt.plot(active_sizes, error_s, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, error_t, marker='o', linestyle='-', label='Triplet')
+plt.plot(active_sizes, e_ciss_list, marker='o', linestyle='-', label='Singlet')
+plt.plot(active_sizes, e_cist_list, marker='o', linestyle='-', label='Triplet')
 
 plt.xlabel('Active Space Size')
-plt.ylabel('Energy Difference(hartree)')
-plt.title('|E_cis - E_cis_act|')
+plt.ylabel('Total energy(hartree)')
+plt.title('Total energy of active spaces ')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
-# Save and display the plots
-plt.show()
-
-file_name = "ttc_cno.png"
+file_name = "ttc_allvir.png"
 plt.savefig(file_name)
 
-'''
-    #rotate 1electron terms to active space
-    #TDA hsppens in ao basis/ no rotation needed just projector
-    Hact = Cact.T @ H_core @ Cact
-    Jact = Cact.T @ J @ Cact
-    Kact = Cact.T @ K @ Cact
-'''
-    #integrals h1 (h_{pq}D_{pq})
- #   h1 = Hact + Jact - 0.5 * Kact'''
+plt.show()
+
