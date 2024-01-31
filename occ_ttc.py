@@ -11,7 +11,6 @@ def print_matrix_as_integers(mat):
         row_str = " ".join(str(int(elem)) for elem in row)
         print(row_str)
 
-
 # Create the molecule
 mol = gto.Mole()
 mol.atom = '''
@@ -51,11 +50,10 @@ mol.spin = 0
 mol.build()
 
 # Perform Restricted Hartree-Fock calculation
-mf = scf.RHF(mol).run()
+mf = scf.RHF(mol).run(verbose = 4)
 
 H_core = mf.get_hcore()
-E_init = mf.e_tot
-print(" Hartree-Fock Energy: %12.8f" % mf.e_tot)
+e_hf = mf.kernel()
 
 F = mf.get_fock()
 J, K = mf.get_jk()
@@ -68,41 +66,28 @@ C = mf.mo_coeff
 Cocc = C[:,mo_occ>0]
 D = mf.make_rdm1()
 
-molden.from_mo(mol, 'BD_mo.molden',C)
-
-num_orbitals = len(C)
+print('number of electrons: ', np.trace(S@D))
 
 X = scipy.linalg.sqrtm(S)
 Xinv = np.linalg.inv(X)
 
+nF = Xinv @ F @ Xinv
+nC = Xinv @ C
 
-#orthogonalization; Canonical basis diagonal F
-C = X @ C
-F = C.conj().T @ F @ C
+molden.from_mo(mol, 'BD_mo.molden',C)
 
+num_orbitals = len(C)
 
-print(" Number of electrons found %12.8f" %np.trace(S @ D))
-print('Number of Orbitals: ', num_orbitals )
+tda_h2o = tdscf.TDA(mf)
+tda_h2o.nstates = 3
+conv_tol = 1e-12
+e0 = tda_h2o.kernel()
 
-#CIS
-mftda = tdscf.TDA(mf)
-mftda.singlet = True
-mftda.run(nstates=1)
-mftda.analyze()
-eciss = mftda.e_tot
-e0 = mftda.e
-print('cis excitation energy:', e0)
-print('cis singlet total energy:', eciss)
-
-mftda = tdscf.TDA(mf)
-mftda.singlet = False
-mftda.run(nstates=1)
-mftda.analyze()
-ecist = mftda.e_tot
-e1 = mftda.e
-print('cis excitation energy:', e1)
-print('cis triplet total energy:', ecist)
-
+tda_h2o = tdscf.TDA(mf)
+tda_h2o.nstates = 3
+tda_h2o.singlet = False
+conv_tol = 1e-12
+e_t0 = tda_h2o.kernel()
 
 act_list = []
 doc_list = []
@@ -117,15 +102,10 @@ print('lumoidx',lumo_index)
 #active_sizes = len(lumo_index,num_orbitals)
 #active_sizes = list(range(0,active_sizes))
 
-estot_list = []
-ettot_list = []
-
-toterror_s = []  
-toterror_t = []  
-
 active_sizes = []
 e000 = []
 e111 = []
+hf = []
 
 for i in range(lumo_index,num_orbitals+1):
 
@@ -152,7 +132,7 @@ for i in range(lumo_index,num_orbitals+1):
     D_tot = D_A +D_C
 
     #projector
-    P_B = S @ Xinv @ (D_C) @ Xinv @ S
+    P_B = S @ D_C @ S
     mu = 1.0e6
 
     Vsys = mf.get_veff(dm=D_tot)
@@ -164,11 +144,11 @@ for i in range(lumo_index,num_orbitals+1):
     verror = Vsys - Vact
 
 
-    n_act = 2*round(0.5 * np.trace(D_A))
+    n_act = 2*round(0.5 * np.trace(S@D_A))
 
     print('Number of Active orbitals: ', nact)
-    print('Number of Virtual orbitals: ', nvir)
-    print('Number of electrons in active space',n_act)
+    print('Number of Virtual orbitals: ', nvir) 
+    print('Number of electrons in active space',n_act) 
 
     emb_mf = scf.RHF(mol)
     mol.nelectron = n_act
@@ -177,37 +157,25 @@ for i in range(lumo_index,num_orbitals+1):
     emb_mf.verbose = 4
     emb_mf.get_hcore = lambda *args: H_core + Vemb
     emb_mf.max_cycle = 200
-    emb_mf.kernel(dm0=D_A)
-
-    eerror = emb_mf.e_tot - mf.e_tot
+    e_hf_act = emb_mf.kernel(dm0=D_A)
+    print('ehfact',e_hf_act)
 
     #molden.from_mo(mol, 'BDocc__cact.molden', )  
 
-    # CIS calculations for singlets and triplets
-    es_eff = tdscf.TDA(emb_mf)
-    es_eff.singlet = True
-    es_eff.run(nstates=3)
-    es_eff.analyze()
-    estot = min(es_eff.e_tot)
-    e00 = min(es_eff.e)
+    emb_tda = tdscf.TDA(emb_mf)
+    emb_tda.nstates = 3
+    e = min(emb_tda.kernel()[0])
 
+    emb_tda_t = tdscf.TDA(emb_mf)
+    emb_tda_t.nstates = 3
+    emb_tda_t.singlet = False
+    e_t = min(emb_tda_t.kernel()[0])
 
-    et_eff = tdscf.TDA(emb_mf)
-    et_eff.singlet = False
-    et_eff.run(nstates=3)
-    et_eff.analyze()
-    ettot = min(et_eff.e_tot)
-    e11 = min(et_eff.e)
+    hf.append(e_hf_act)
+    e000.append(e)
+    e111.append(e_t)
 
-    e000.append(e00)
-    e111.append(e11)
-
-    estot_list.append(estot)
-    ettot_list.append(ettot)
-
-    toterror_s.append(estot - eciss)
-    toterror_t.append(ettot - ecist)
-
+    print('shapes', e000.shape, e111.shape)
 
 plt.figure(figsize=(10, 6))
 
@@ -216,7 +184,7 @@ plt.subplot(1, 2, 1)
 plt.plot(active_sizes, e000, marker='o', linestyle='-', label='Singlet')
 plt.plot(active_sizes, e111, marker='o', linestyle='-', label='Triplet')
 plt.axhline(y=e0, color='blue', linestyle='--', label='CIS Singlet')
-plt.axhline(y=e1, color='red', linestyle='--', label='CIS Triplet')
+plt.axhline(y=e_t0, color='red', linestyle='--', label='CIS Triplet')
 
 
 plt.xlabel('# orbitals in active space')
@@ -228,13 +196,11 @@ plt.tight_layout()
 
 # Create the second subplot
 plt.subplot(1, 2, 2)
-plt.plot(active_sizes, estot_list, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, ettot_list, marker='o', linestyle='-', label='Triplet')
-plt.axhline(y=eciss, color='red', linestyle='--', label='CIS Singlet')
-plt.axhline(y=ecist, color='blue', linestyle='--', label='CIS Triplet')
+plt.plot(active_sizes, hf, marker='o', linestyle='-', label='Hartree fock in active space')
+plt.axhline(y=e_hf, color='red', linestyle='--', label='Hartree fock energy')
 
 plt.xlabel('# orbitals in active space')
-plt.ylabel('Total energy(hartree)')
+plt.ylabel('Total energy (hartree)')
 plt.title('Total energy of active space_OCC')
 plt.grid(True)
 plt.legend()
