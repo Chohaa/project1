@@ -1,5 +1,5 @@
 import pyscf 
-from pyscf import gto, scf, tdscf
+from pyscf import gto, scf, tdscf, cc, tddft
 from pyscf.tools import molden
 import matplotlib.pyplot as plt
 
@@ -66,29 +66,78 @@ C = mf.mo_coeff
 Cocc = C[:,mo_occ>0]
 D = mf.make_rdm1()
 
-X = scipy.linalg.sqrtm(S)
-Xinv = np.linalg.inv(X)
+np.savetxt("F", F, fmt='%1.13f')
+np.savetxt("C", C, fmt='%1.13f')
+np.savetxt("D", D, fmt='%1.13f')
 
-nF = Xinv @ F @ Xinv
-nC = Xinv @ C
+# #canonicalize
+# e, v = np.linalg.eigh(S)
+# X = np.dot(v*np.sqrt(e), v.T.conj())
+# Xinv = scipy.linalg.inv(X)
 
-molden.from_mo(mol, 'water.molden',nC)
+# #canonicalize
+# F_mo = C.T @ F @ C
+# e, v = np.linalg.eigh(F_mo)
+# print('e, v', e.shape, v.shape)
+# np.savetxt("F_mo", F_mo, fmt='%1.13f')
+# np.savetxt("e", e, fmt='%1.13f')
+# np.savetxt("v", v, fmt='%1.13f')
+# C_bar = C @ v
+# #orthogonalize
+# C_bar = X @ C
+# F_bar = Xinv.T @ F @ Xinv
+# D_bar = mf.make_rdm1(C_bar, mo_occ) 
+
+# np.savetxt("e", e, fmt='%1.13f')
+# np.savetxt("v", v, fmt='%1.13f')
+# np.savetxt("C_bar", C_bar, fmt='%1.13f')
+# np.savetxt("D_bar", D_bar, fmt='%1.13f')
+# np.savetxt("F_bar", F_bar, fmt='%1.13f')
+# np.savetxt("F_bar_mo", C_bar.T @ F_bar @ C_bar, fmt='%1.13f')
+# np.savetxt("D_bar_mo", C_bar.T @ D_bar @ C_bar, fmt='%1.13f')
 
 num_orbitals = len(C)
+print("number of orbitals: %12.8f" %num_orbitals)
+print("number of electrons: %12.8f" %np.trace(S@D))
+molden.from_mo(mol, 'ttc_hf.molden', C)
+
+# Hartree to eV conversion factor
+ev_conversion_factor = 27.2114079527
+ev_conversion_factor = float(ev_conversion_factor)
+
+#eom-ccsd
+mycc = cc.CCSD(mf).run()
+e_s, c_s = mycc.eomee_ccsd_singlet(nroots=1)
+e_t, c_t = mycc.eomee_ccsd_triplet(nroots=1)
+print('eomcc singlet, triplet', e_s, e_t)
+e_s = e_s * ev_conversion_factor
+e_t = e_t * ev_conversion_factor
+print('eomcc singlet,triplet eV', e_s, e_t)
+
+#tddft
+mytd = mol.RKS().run().TDDFT().run()
+e_dft_s = min(mytd.kernel()[0])
+mytd.singlet = False
+e_dft_t = min(mytd.kernel()[0])
+print('tddcf singlet, triplet', e_dft_s, e_dft_t)
+e_dft_s = e_dft_s * ev_conversion_factor
+e_dft_t = e_dft_t * ev_conversion_factor
+print('tddft singlet,triplet eV', e_dft_s, e_dft_t)
+
+#TDA
+tda_h2o = tdscf.TDA(mf)
+tda_h2o.nstates = 3
+e_s_cis = min(tda_h2o.kernel()[0])
 
 tda_h2o = tdscf.TDA(mf)
-tda_h2o.nstates = 5
-conv_tol = 1e-12
-e0 = min(tda_h2o.kernel()[0])
-print('tda e (Hartree)', e0)
-
-tda_h2o = tdscf.TDA(mf)
-tda_h2o.nstates = 5
+tda_h2o.nstates = 3
 tda_h2o.singlet = False
-conv_tol = 1e-12
-e_t0 = min(tda_h2o.kernel()[0])
-print('triplet tda e (Hartree)', e_t0)
+e_t_cis = min(tda_h2o.kernel()[0])
+print('tda singlet, triplet', e_s_cis, e_t_cis)
 
+e_s_cis = e_s_cis * ev_conversion_factor
+e_t_cis = e_t_cis * ev_conversion_factor
+print('tda singlet, triplet eV', e_s_cis, e_t_cis)
 
 act_list = []
 doc_list = []
@@ -104,13 +153,12 @@ print('lumoidx',lumo_index)
 #active_sizes = list(range(0,active_sizes))
 
 active_sizes = []
-e000 = []
-e111 = []
-hf = []
+elists = []
+elistt = []
 
-for i in range(0,homo_index):
+for i in range(0,lumo_index):
 
-    active_sizes.append(num_orbitals-i)
+    active_sizes.append(i)
 
     act_list = list(range(i, num_orbitals))
     vir_list = list(range(0, i))
@@ -127,10 +175,11 @@ for i in range(0,homo_index):
 
     D_A = np.dot(Cact*act_occ, Cact.conj().T)
     D_C = np.dot(Cvir*vir_occ, Cvir.conj().T)
-    D_tot = D_A +D_C
+    D_tot = D_A+D_C
+    P_c = np.dot(Cvir, Cvir.conj().T)
 
     #projector
-    P_B = S @ D_C @ S
+    P = S @ P_c @ S
     mu = 1.0e6
 
     Vsys = mf.get_veff(dm=D_tot)
@@ -138,9 +187,8 @@ for i in range(0,homo_index):
     Venv = mf.get_veff(dm=D_C)
 
     #new fock ao
-    Vemb = Vsys - Vact + (mu * P_B)
+    Vemb = Vsys - Vact + (mu * P)
     verror = Vsys - Vact
-
 
     n_act = 2*round(0.5 * np.trace(S@D_A))
 
@@ -158,59 +206,57 @@ for i in range(0,homo_index):
     e_hf_act = emb_mf.kernel(dm0=D_A)
     print('ehfact',e_hf_act)
 
-    #molden.from_mo(mol, 'BDocc__cact.molden', )  
+    # Hartree to eV conversion factor
+    ev_conversion_factor = 27.2114079527
 
     emb_tda = tdscf.TDA(emb_mf)
-    emb_tda.nstates = 5
-    conv_tol = 1e-12
+    emb_tda.nstates = 3
     e = min(emb_tda.kernel()[0])
-    print('tda e(Hartree)', e)
+    e_ev = e * ev_conversion_factor
 
     emb_tda_t = tdscf.TDA(emb_mf)
-    emb_tda_t.nstates = 5
+    emb_tda_t.nstates = 3
     emb_tda_t.singlet = False
     e_t = min(emb_tda_t.kernel()[0])
-    print('triplet tda e (Hartree)', e_t)
+    e_t_ev = e_t * ev_conversion_factor
 
-    hf.append(e_hf_act)
-    e000.append(e)
-    e111.append(e_t)
+    elists.append(e_ev)
+    elistt.append(e_t_ev)
 
+elists = np.asarray(elists)
+np.savetxt("vir_singlet", elists, fmt='%1.13f')
 
-plt.figure(figsize=(10, 6))
+elistt = np.asarray(elistt)
+np.savetxt("vir_triplet", elistt, fmt='%1.13f')
 
-# Create the first subplot
+active_sizes = [lumo_index - i for i in active_sizes ]
+
+plt.figure(figsize=(15, 6))
+
 plt.subplot(1, 2, 1)
-plt.plot(active_sizes, e000, marker='o', linestyle='-', label='Singlet')
-plt.plot(active_sizes, e111, marker='o', linestyle='-', label='Triplet')
-plt.axhline(y=e0, color='blue', linestyle='--', label='CIS Singlet')
-plt.axhline(y=e_t0, color='red', linestyle='--', label='CIS Triplet')
-
-
-plt.xlabel('# orbitals in active space')
-plt.ylabel('Excitation energy (in eV)')
-plt.title('Excitation energy of active space')
+plt.plot(active_sizes, elists, marker='o', linestyle='-', label='CIS_act')
+plt.axhline(y=e_s_cis, color='blue', linestyle='--', label='CIS')
+plt.axhline(y=e_s, color='black', linestyle='--', label='EOM-CCSD')
+plt.axhline(y=e_dft_s, color='red', linestyle='--', label='TDDFT')
+plt.xlabel('# of occupied orbitals in active space')
+plt.ylabel('Excited State energies (eV)')
+plt.title('Excitation energy of active space; Singlets')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
-plt.show()
-
-exit()
-
-# Create the second subplot
 plt.subplot(1, 2, 2)
-plt.plot(active_sizes, hf, marker='o', linestyle='-', label='Hartree fock energy')
-plt.axhline(y=e_hf, color='red', linestyle='--', label='Hartree fock in active space')
-
-plt.xlabel('# orbitals in active space')
-plt.ylabel('Total energy (hartree)')
-plt.title('Total energy of active space_OCC')
+plt.plot(active_sizes, elistt, marker='o', linestyle='-', label='CIS_act')
+plt.axhline(y=e_t_cis, color='blue', linestyle='--', label='CIS')
+plt.axhline(y=e_t, color='black', linestyle='--', label='EOM-CCSD')
+plt.axhline(y=e_dft_t, color='red', linestyle='--', label='TDDFT')
+plt.xlabel('# of occupied orbitals in active space')
+plt.ylabel('Excited State energies (eV)')
+plt.title('Excitation energy of active space; Triplets')
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 
-file_name = "ttc_allocc.png"
+file_name = "ttc_allvir_plots.png"
 plt.savefig(file_name)
-
 plt.show()
