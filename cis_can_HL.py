@@ -237,16 +237,18 @@ for i in range(0, w -1):
     elists.append(e_ev)
     elistt.append(e_t_ev)
 
-elists = np.asarray(elists)
+
+active_sizes_no = np.asarray(active_sizes)
+elists_no = np.asarray(elists)
 np.savetxt("can_HL_singlet", elists, fmt='%1.13f')
 
-elistt = np.asarray(elistt)
+elistt_no = np.asarray(elistt)
 np.savetxt("can_HL_triplet", elistt, fmt='%1.13f')
 
 plt.figure(figsize=(15, 6))
 
 plt.subplot(1, 2, 1)
-plt.plot(active_sizes, elists, marker='o', linestyle='-', label='CIS_act')
+plt.plot(active_sizes_no, elists_no, marker='o', linestyle='-', label='CIS_act')
 plt.axhline(y=e_s_cis, color='blue', linestyle='--', label='CIS')
 # plt.axhline(y=e_s, color='black', linestyle='--', label='EOM-CCSD')
 # plt.axhline(y=e_dft_s, color='red', linestyle='--', label='TDDFT')
@@ -258,7 +260,7 @@ plt.legend()
 plt.tight_layout()
 
 plt.subplot(1, 2, 2)
-plt.plot(active_sizes, elistt, marker='o', linestyle='-', label='CIS_act')
+plt.plot(active_sizes_no, elistt_no, marker='o', linestyle='-', label='CIS_act')
 plt.axhline(y=e_t_cis, color='blue', linestyle='--', label='CIS')
 # plt.axhline(y=e_t, color='black', linestyle='--', label='EOM-CCSD')
 # plt.axhline(y=e_dft_t, color='red', linestyle='--', label='TDDFT')
