@@ -1,2 +1,5 @@
 # project1
-cis, active space and other methods for tetracene
+compute configuration interaction singles within active space.
+
+# Active space
+defined 
